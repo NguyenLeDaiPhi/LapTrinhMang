@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Spring Boot-SignalinghandlerApplication<signalinghandler>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "com.audio.signalinghandler.SignalinghandlerApplication",
+      "projectName": "signalinghandler",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}
