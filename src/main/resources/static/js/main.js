@@ -161,10 +161,12 @@ function createPeerConnection(otherUser, isOfferor) {
       audioContainer.appendChild(remoteAudio);
     }
     remoteAudio.srcObject = event.streams[0];
-    // Add remote stream to the mixer for recording
-    audioContext
-      .createMediaStreamSource(event.streams[0])
-      .connect(mixedStreamDestination);
+    // Add remote stream to the mixer for recording if audioContext is available
+    if (audioContext && mixedStreamDestination) {
+      audioContext
+        .createMediaStreamSource(event.streams[0])
+        .connect(mixedStreamDestination);
+    }
   };
 
   // Handle ICE candidates
