@@ -29,8 +29,9 @@ const iceServers = {
 };
 
 function connect(event) {
-  username = document.querySelector("#name").value.trim();
+  username = usernamePage.getAttribute("data-username");
   useEncryption = encryptCheckbox.checked;
+  event.preventDefault();
 
   if (username != null) {
     usernamePage.classList.add("hidden");
@@ -51,7 +52,6 @@ function connect(event) {
       onError
     );
   }
-  event.preventDefault();
 }
 
 async function onConnected() {
@@ -312,7 +312,14 @@ function logout() {
   }
 }
 
-usernameForm.addEventListener("submit", connect, true);
+// Automatically connect when the page loads
+document.addEventListener("DOMContentLoaded", () => {
+  username = usernamePage.getAttribute("data-username");
+  if (username) {
+    // We can directly trigger the connect logic or just have a "Join" button
+    usernameForm.addEventListener("submit", connect, true);
+  }
+});
 
 window.onbeforeunload = () => {
   if (stompClient) {

@@ -1,6 +1,8 @@
 package com.audio.signalinghandler.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -8,6 +10,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
+import com.audio.signalinghandler.model.UserPrinciple;
 import com.audio.signalinghandler.dto.UserDTO;
 import com.audio.signalinghandler.model.User;
 import com.audio.signalinghandler.service.AuthenticationService;
@@ -29,9 +32,13 @@ public class AuthenticationController {
     }
 
     @PostMapping("/register")
-    public String registerUser(@ModelAttribute("user") UserDTO userDTO) {
-        authService.register(userDTO);
-        return "redirect:/user/login?registered";
+    public String registerUser(@ModelAttribute("user") UserDTO userDTO, Model model) {
+        try {
+            authService.register(userDTO);
+            return "redirect:/user/login?registered";
+        } catch (IllegalArgumentException e) {
+            return "redirect:/user/register?error";
+        }
     }
 
     @GetMapping("/login")
@@ -67,7 +74,11 @@ public class AuthenticationController {
     }
 
     @GetMapping("/index")
-    public String indexForm() {
+    public String indexForm(Model model, @AuthenticationPrincipal UserPrinciple userPrinciple) {
+        if (userPrinciple != null) {
+            // Pass the actual username to the view
+            model.addAttribute("username", userPrinciple.getRealUsername());
+        }
         return "index";
     }
 }

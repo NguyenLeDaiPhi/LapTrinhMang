@@ -24,6 +24,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // The endpoint client can connect to (e.g., for initial HTTP handshake)
         // Ensure to allow CORS if frontend is on different port/domain
-        registry.addEndpoint("/ws").setAllowedOrigins("http://localhost:8080").withSockJS();
+        registry.addEndpoint("/ws").setAllowedOrigins("http://localhost:8090").withSockJS();
     }
 }

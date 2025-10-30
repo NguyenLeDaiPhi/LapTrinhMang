@@ -1,61 +1,103 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>User Login</title>
-    <link rel="stylesheet" href="/css/main.css"> <!-- Optional: reuse your existing styles -->
+    <link rel="stylesheet" href="/css/main.css" />
+    <!-- Optional: reuse your existing styles -->
     <style>
-        /* Adding some specific styles for the login form */
-        body { display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .error-message {
-            display: none; /* Hidden by default */
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            padding: 0.75rem;
-            border-radius: 4px;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-        .success-message {
-            background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;
-            padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; text-align: center;
-        }
-        .register-link { margin-top: 1rem; text-align: center; }
-        .register-link a { color: #007bff; text-decoration: none; }
-        .register-link a:hover { text-decoration: underline; }
+      /* Adding some specific styles for the login form */
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      .error-message {
+        display: none; /* Hidden by default */
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+        padding: 0.75rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      .success-message {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+        padding: 0.75rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      .register-link {
+        margin-top: 1rem;
+        text-align: center;
+      }
+      .register-link a {
+        color: #007bff;
+        text-decoration: none;
+      }
+      .register-link a:hover {
+        text-decoration: underline;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div class="username-page-container">
+      <h1 class="title">User Login</h1>
 
-<div class="username-page-container">
-    <h1 class="title">User Login</h1>
-
-    <div th:if="${param.error}" class="error-message">
+      <div th:if="${param.error}" class="error-message">
         Invalid email or password. Please try again.
-    </div>
-    <div th:if="${param.logout}" class="success-message">
+      </div>
+      <div th:if="${param.logout}" class="success-message">
         You have been logged out.
-    </div>
-    <div th:if="${param.registered}" class="success-message">
+      </div>
+      <div th:if="${param.registered}" class="success-message">
         Registration successful! Please log in.
-    </div>
+      </div>
 
-    <form id="loginForm" name="loginForm" th:action="@{/user/login}" th:object="${user}" method="post">
+      <form
+        id="loginForm"
+        name="loginForm"
+        th:action="@{/user/login}"
+        th:object="${user}"
+        method="post"
+      >
         <div class="form-group">
-            <input type="email" id="email" placeholder="Email" th:field="*{email}" autocomplete="off" class="form-control" required/>
+          <input
+            type="text"
+            id="username"
+            placeholder="Username"
+            th:field="*{username}"
+            autocomplete="off"
+            class="form-control"
+            required
+          />
         </div>
         <div class="form-group">
-            <input type="password" id="password" placeholder="Password" th:field="*{password}" autocomplete="off" class="form-control" required/>
+          <input
+            type="password"
+            id="password"
+            placeholder="Password"
+            th:field="*{password}"
+            autocomplete="off"
+            class="form-control"
+            required
+          />
         </div>
         <div class="form-group">
-            <button type="submit" class="accent username-submit">Login</button>
+          <button type="submit" class="accent username-submit">Login</button>
         </div>
-    </form>
-    <div class="register-link">
-        <p>Don't have an account? <a th:href="@{/user/register}">Register here</a></p>
+      </form>
+      <div class="register-link">
+        <p>
+          Don't have an account?
+          <a th:href="@{/user/register}">Register here</a>
+        </p>
+      </div>
     </div>
-</div>
-
-</body>
+  </body>
 </html>

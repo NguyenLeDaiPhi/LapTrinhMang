@@ -31,6 +31,9 @@ public class AuthenticationService {
         if (userRepository.findByEmail(userDTO.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email " + userDTO.getEmail() + " is already registerd, please use another email.");
         }
+        if (userRepository.findByUsername(userDTO.getUsername()).isPresent()) {
+            throw new IllegalArgumentException("Username " + userDTO.getUsername() + " is already taken, please choose another one.");
+        }
 
         User userRegister = new User();
         userRegister.setEmail(userDTO.getEmail());
@@ -46,9 +49,9 @@ public class AuthenticationService {
 
             AuthenticationManager authManager = new ProviderManager(provider);
 
-            authManager.authenticate(new UsernamePasswordAuthenticationToken(userDTO.getEmail(), userDTO.getPassword()));
+            authManager.authenticate(new UsernamePasswordAuthenticationToken(userDTO.getUsername(), userDTO.getPassword()));
 
-            return jwtService.generateToken(userDTO.getEmail());
+            return jwtService.generateToken(userDTO.getUsername());
 
         } catch (BadCredentialsException e) {
             return null;

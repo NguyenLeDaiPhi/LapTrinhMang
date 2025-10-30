@@ -6,7 +6,7 @@
     <link rel="stylesheet" href="/css/main.css" />
   </head>
   <body>
-    <div id="username-page">
+    <div id="username-page" th:data-username="${username}">
       <!-- Add this inside your #chat-page div in index.html -->
       <div class="logout-container">
         <form
@@ -20,7 +20,7 @@
         </button>
       </div>
       <div class="username-page-container">
-        <h1 class="title">Enter your username to join</h1>
+        <h1 class="title">Click "Join Call" to start</h1>
         <form id="usernameForm" name="usernameForm">
           <div class="form-group">
             <input
@@ -28,7 +28,7 @@
               id="name"
               placeholder="Username"
               autocomplete="off"
-              class="form-control"
+              class="form-control hidden"
             />
           </div>
           <div class="form-group">
@@ -63,6 +63,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
-    <script src="/js/main.js"></script>
+    <script th:src="@{/js/main.js}"></script>
   </body>
 </html>

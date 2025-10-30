@@ -7,9 +7,5 @@ public class UserDTO {
     private String username;
     private String email;
     private String password;
-    private String role;
-
-    public String role() {
-        return "USER";
-    }
+    private String role = "USER";
 }

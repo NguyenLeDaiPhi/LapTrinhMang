@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import com.audio.signalinghandler.model.User;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEmail(String username);
+public interface UserRepository extends JpaRepository<User, Integer> {
+    Optional<User> findByEmail(String email);
+    Optional<User> findByUsername(String username);
 }

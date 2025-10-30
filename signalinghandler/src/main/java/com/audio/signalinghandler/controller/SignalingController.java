@@ -30,4 +30,11 @@ public class SignalingController {
         messagingTemplate.convertAndSendToUser(
                 message.getRecipient(), "/queue/signals", message);
     }
+
+    @MessageMapping("/signal.leave")
+    public void leave(@Payload SignalingMessage message) {
+        // Broadcast to all that a user has left
+        // This handles graceful disconnects (e.g., user clicks logout)
+        messagingTemplate.convertAndSend("/topic/public", message);
+    }
 }
