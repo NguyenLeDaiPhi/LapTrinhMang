@@ -2,10 +2,7 @@ package com.audio.signalinghandler.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -19,7 +16,7 @@ public class AuthenticationService {
     private UserRepository userRepository;
 
     @Autowired
-    private AuthenticationDetailsService authDetailsService;
+    private AuthenticationManager authManager; // Inject the global AuthenticationManager
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -44,16 +41,11 @@ public class AuthenticationService {
 
     public String verify(UserDTO userDTO) {
         try {
-            DaoAuthenticationProvider provider = new DaoAuthenticationProvider(authDetailsService);
-            provider.setPasswordEncoder(passwordEncoder);
-
-            AuthenticationManager authManager = new ProviderManager(provider);
-
+            // Use the injected AuthenticationManager
             authManager.authenticate(new UsernamePasswordAuthenticationToken(userDTO.getUsername(), userDTO.getPassword()));
 
             return jwtService.generateToken(userDTO.getUsername());
-
-        } catch (BadCredentialsException e) {
+        } catch (Exception e) {
             return null;
         }
     }

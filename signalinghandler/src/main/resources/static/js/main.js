@@ -28,79 +28,100 @@ const iceServers = {
   ],
 };
 
-function connect(event) {
+async function connect(event) {
+  event.preventDefault();
   username = usernamePage.getAttribute("data-username");
   useEncryption = encryptCheckbox.checked;
-  event.preventDefault();
 
-  if (username != null) {
-    usernamePage.classList.add("hidden");
-    chatPage.classList.remove("hidden");
-    yourUsernameSpan.textContent = username;
+  // Disable the form to prevent multiple connection attempts
+  usernameForm.querySelector("button").setAttribute("disabled", "true");
+  encryptCheckbox.setAttribute("disabled", "true");
 
-    const socket = new SockJS("/ws");
-    stompClient = Stomp.over(socket);
+  if (!username) return;
 
-    stompClient.connect(
-      {},
-      async () => {
-        if (useEncryption) {
-          await setupEncryptionKey();
-        }
-        onConnected();
-      },
-      onError
-    );
-  }
-}
+  usernamePage.classList.add("hidden");
+  chatPage.classList.remove("hidden");
+  yourUsernameSpan.textContent = username;
+  connectingElement.classList.remove("hidden");
 
-async function onConnected() {
-  connectingElement.classList.add("hidden");
-
-  // Get local audio stream
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
+    // --- A more robust connection flow ---
+
+    // 1. Get the local audio stream from the user
+    const streamPromise = navigator.mediaDevices
+      .getUserMedia({
+        audio: true,
+        video: false,
+      })
+      .then((stream) => {
+        console.log("Microphone access granted.");
+        localStream = stream;
+        const localAudio = document.createElement("audio");
+        localAudio.srcObject = localStream;
+        localAudio.id = "local-audio";
+        localAudio.muted = true;
+        localAudio.play();
+        audioContainer.appendChild(localAudio);
+        return stream; // Pass the stream along
+      });
+
+    // 2. Establish the WebSocket connection
+    const stompPromise = new Promise((resolve, reject) => {
+      const getCookie = (name) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(";").shift();
+      };
+      const socket = new SockJS("/ws");
+      stompClient = Stomp.over(socket);
+      stompClient.connect(
+        { Authorization: `Bearer ${getCookie("jwt-token-user")}` },
+        () => {
+          console.log("WebSocket connection established.");
+          resolve(stompClient);
+        },
+        (error) => {
+          console.error("STOMP connection error:", error);
+          reject(error);
+        }
+      );
     });
-    const localAudio = document.createElement("audio");
-    localAudio.srcObject = localStream;
-    localAudio.id = "local-audio";
-    localAudio.muted = true; // Mute self to avoid feedback
-    localAudio.play();
-    audioContainer.appendChild(localAudio);
+
+    // 3. Wait for BOTH the stream and the connection to be ready
+    await Promise.all([streamPromise, stompPromise]);
+
+    console.log("Ready for signaling. Subscribing to topics...");
+    connectingElement.classList.add("hidden");
+
+    // 4. Now that we are fully ready, subscribe to topics
+    stompClient.subscribe("/topic/public", onPublicMessageReceived);
+    stompClient.subscribe(
+      `/user/${username}/queue/signals`,
+      onPrivateMessageReceived
+    );
+
+    // 5. Announce our presence to others
+    stompClient.send(
+      "/app/signal.join",
+      {},
+      JSON.stringify({ sender: username, type: "JOIN" })
+    );
   } catch (error) {
-    console.error("Error accessing media devices.", error);
-    alert("Could not access your microphone. Please check permissions.");
-    return;
+    console.error("Failed to connect or get media:", error);
+    alert("Could not connect. Please check permissions and refresh the page.");
+    connectingElement.textContent = "Failed to connect";
   }
-
-  // Subscribe to the Public Topic to get user join/leave notifications
-  stompClient.subscribe("/topic/public", onPublicMessageReceived);
-
-  // Subscribe to the Private Queue for signaling messages
-  stompClient.subscribe(
-    `/user/${username}/queue/signals`,
-    onPrivateMessageReceived
-  );
-
-  // Tell your name to the server
-  stompClient.send(
-    "/app/signal.join",
-    {},
-    JSON.stringify({ sender: username, type: "JOIN" })
-  );
 }
 
 function onPublicMessageReceived(payload) {
   const message = JSON.parse(payload.body);
-
   if (message.type === "JOIN" && message.sender !== username) {
     console.log(`New user joined: ${message.sender}`);
     addUserToList(message.sender);
-    // Create an offer to the new user
-    createPeerConnection(message.sender, true);
-  } else if (message.type === "LEAVE") {
+    const isOfferor = username < message.sender;
+    console.log(`Should I be the offeror for ${message.sender}? ${isOfferor}`);
+    createPeerConnection(message.sender, isOfferor);
+  } else if (message.type === "LEAVE" && message.sender !== username) {
     console.log(`User left: ${message.sender}`);
     removeUser(message.sender);
   }
@@ -113,9 +134,12 @@ async function onPrivateMessageReceived(payload) {
   console.log(`Signal received from ${sender}`, signal);
 
   let pc = peerConnections[sender];
-  if (pc === undefined) {
-    // If we are the receiver of the offer
-    pc = createPeerConnection(sender, false);
+  if (pc === undefined && signal.type === "OFFER") {
+    // If we are the receiver of the offer, create a peer connection.
+    // The createPeerConnection function stores the new pc in the peerConnections map.
+    // We then need to retrieve it from the map for the 'pc' variable in this scope.
+    createPeerConnection(sender, false);
+    pc = peerConnections[sender];
   }
 
   if (signal.type === "OFFER") {
@@ -130,8 +154,24 @@ async function onPrivateMessageReceived(payload) {
     });
   } else if (signal.type === "ANSWER") {
     await pc.setRemoteDescription(new RTCSessionDescription(signal.data));
+    // After setting the answer, the connection is established from the offerer's side.
+    // Now, the ICE candidates that were gathered can be sent.
+    // This part is implicitly handled by the onicecandidate event handler,
+    // but logging helps confirm the state.
+    console.log(
+      `Connection established with ${sender} after receiving answer.`
+    );
   } else if (signal.type === "ICE") {
     await pc.addIceCandidate(new RTCIceCandidate(signal.data));
+  } else if (signal.type === "JOIN") {
+    // This is a private message to a new user, telling them about an existing user.
+    console.log(`Received private JOIN for existing user: ${sender}`);
+    addUserToList(sender);
+    const isOfferor = username < sender;
+    console.log(`Should I be the offeror for ${sender}? ${isOfferor}`);
+    createPeerConnection(sender, isOfferor);
+  } else {
+    console.warn("Received unknown signal type:", signal.type);
   }
 }
 
@@ -140,6 +180,11 @@ function createPeerConnection(otherUser, isOfferor) {
   const pc = new RTCPeerConnection(iceServers);
   peerConnections[otherUser] = pc;
 
+  if (!localStream) {
+    console.error("localStream is not available yet! Cannot add tracks.");
+    return pc;
+  }
+
   // Add local stream tracks to the peer connection
   localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
@@ -147,18 +192,23 @@ function createPeerConnection(otherUser, isOfferor) {
   pc.ontrack = (event) => {
     console.log(`Track received from ${otherUser}`);
 
-    if (useEncryption && event.streams[0] && event.receiver.transform) {
-      setupReceiverTransform(event.receiver);
-    }
+    // if (useEncryption && event.streams[0] && event.receiver.transform) {
+    //   setupReceiverTransform(event.receiver);
+    // }
 
     let remoteAudio = document.getElementById(`audio-${otherUser}`);
     if (!remoteAudio) {
       remoteAudio = document.createElement("audio");
       remoteAudio.id = `audio-${otherUser}`;
-      remoteAudio.autoplay = true;
       audioContainer.appendChild(remoteAudio);
     }
     remoteAudio.srcObject = event.streams[0];
+    // Explicitly call play() to handle browser autoplay policies
+    remoteAudio
+      .play()
+      .catch((e) =>
+        console.error(`Error playing remote audio for ${otherUser}:`, e)
+      );
   };
 
   // Handle ICE candidates
@@ -176,9 +226,9 @@ function createPeerConnection(otherUser, isOfferor) {
   // If this peer is the one creating the offer
   if (isOfferor) {
     pc.onnegotiationneeded = async () => {
-      if (useEncryption) {
-        setupSenderTransform(pc);
-      }
+      // if (useEncryption) {
+      //   setupSenderTransform(pc);
+      // }
 
       try {
         const offer = await pc.createOffer();
@@ -199,6 +249,8 @@ function createPeerConnection(otherUser, isOfferor) {
 }
 
 // --- E2EE Functions using Insertable Streams ---
+
+/* E2EE is complex and disabled for now to ensure basic functionality works.
 
 async function setupEncryptionKey() {
   // This is a simplified key management. In a real app, use a secure key exchange mechanism.
@@ -265,6 +317,8 @@ function setupReceiverTransform(receiver) {
   receiver.transform = new RTCRtpScriptTransform(transformStream);
 }
 
+*/
+
 function sendSignal(signal) {
   stompClient.send("/app/signal.forward", {}, JSON.stringify(signal));
 }
@@ -298,26 +352,30 @@ function removeUser(user) {
   }
 }
 
-function logout() {
+function logout(event) {
+  // Prevent the form from submitting immediately
+  event.preventDefault();
+
   // Disconnect from WebSocket gracefully before logging out
   if (stompClient) {
     stompClient.disconnect(() => {
       console.log("Disconnected from WebSocket.");
       // Submit the form to perform the POST request for logout
-      document.querySelector("#logout-form").submit();
+      event.target.closest("form").submit();
     });
   } else {
     // If not connected, just submit the form
-    document.querySelector("#logout-form").submit();
+    event.target.closest("form").submit();
   }
 }
 
 // Automatically connect when the page loads
 document.addEventListener("DOMContentLoaded", () => {
   username = usernamePage.getAttribute("data-username");
+  logoutButton.addEventListener("click", logout);
   if (username) {
     // We can directly trigger the connect logic or just have a "Join" button
-    usernameForm.addEventListener("submit", connect, true);
+    usernameForm.addEventListener("submit", connect);
   }
 });
 
@@ -332,4 +390,9 @@ window.onbeforeunload = () => {
   }
 };
 
-logoutButton.addEventListener("click", logout, true);
+function onError(error) {
+  connectingElement.textContent =
+    "Could not connect to WebSocket server. Please refresh this page to try again!";
+  connectingElement.style.color = "red";
+  console.error("STOMP Error:", error);
+}

@@ -1,5 +1,6 @@
 package com.audio.signalinghandler.model;
 
+import java.security.Principal;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -7,7 +8,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-public class UserPrinciple implements UserDetails {
+public class UserPrinciple implements UserDetails, Principal {
     
     private User user;
     
@@ -27,6 +28,12 @@ public class UserPrinciple implements UserDetails {
 
     @Override
     public String getUsername() {
+        return user.getUsername();
+    }
+
+    // This is the crucial method that Spring's SimpUserRegistry uses.
+    @Override
+    public String getName() {
         return user.getUsername();
     }
 

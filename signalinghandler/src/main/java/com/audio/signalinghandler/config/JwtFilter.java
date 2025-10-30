@@ -32,8 +32,16 @@ public class JwtFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         
+        final String requestURI = request.getRequestURI();
+
+        // Skip JWT processing for public endpoints
+        if (requestURI.equals("/user/login") || requestURI.equals("/user/register") || requestURI.startsWith("/css/") || requestURI.startsWith("/js/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String jwt = null;
-        String userEmail = null;
+        String username = null;
 
         // 1. Extract token from cookie
         if (request.getCookies() != null) {
@@ -50,11 +58,11 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         // 2. Extract email from token
-        userEmail = jwtService.extractEmail(jwt);
+        username = jwtService.extractUsername(jwt);
 
         // 3. Validate token and set security context
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.authDetailsService.loadUserByUsername(userEmail);
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.authDetailsService.loadUserByUsername(username);
 
             if (jwtService.validateToken(jwt, userDetails)) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(

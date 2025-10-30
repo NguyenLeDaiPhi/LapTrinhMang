@@ -1,11 +1,13 @@
 package com.audio.signalinghandler.service;
 
-import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+import javax.crypto.SecretKey;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -18,19 +20,20 @@ import io.jsonwebtoken.security.Keys;
 public class JwtServiceUser {
     // The key needs to be at least 256 bits (32 bytes) for HS256.
     // The previous key was being decoded incorrectly and was too short.
-    // This is a new, secure, Base64-encoded key.
-    public static final String SECRET = "Y2hhbmdlLW1lLXRoaXMtaXMtYS1zZWNyZXQta2V5LWZvci1qd3Qtc2VjdXJpdHk=";
+    // Moved to application.properties for better security and management.
+    @Value("${jwt.secret}")
+    private String secret;
 
-    public Key getKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(SECRET);
+    public SecretKey getKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
         return Keys.hmacShaKeyFor(keyBytes); 
     }
 
-    public String generateToken(String email) {
+    public String generateToken(String username) {
         Map<String, Object> claims = new HashMap<>();
             return Jwts.builder()
                     .claims(claims)
-                    .subject(email)
+                    .subject(username)
                     .issuedAt(new Date(System.currentTimeMillis()))
                     .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
                     .signWith(getKey())
@@ -38,8 +41,8 @@ public class JwtServiceUser {
 
     }
 
-    public String extractEmail(String token) {
-        // Extract the subject (email) from the jwt token
+    public String extractUsername(String token) {
+        // Extract the subject (username) from the jwt token
         return extractClaim(token, Claims::getSubject);
     }
 
@@ -48,19 +51,18 @@ public class JwtServiceUser {
         return claimResolver.apply(claims);
     }
 
-    @Deprecated
+    // This method is updated for modern jjwt versions (0.12.0+)
     private Claims extractAllClaims(String token) {
-        // Use the parser compatible with the project's jjwt version
-        return Jwts.parser()
-                .setSigningKey(getKey())
+        return Jwts.parser() // The new builder-style parser
+                .verifyWith(getKey()) // Use verifyWith(SecretKey) instead of setSigningKey
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token) // Use parseSignedClaims(token) instead of parseClaimsJws
+                .getPayload(); // Use getPayload() instead of getBody()
     }
 
     public boolean validateToken(String token, UserDetails userDetails) {
-        final String email = extractEmail(token);
-        return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        final String username = extractUsername(token);
+        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {

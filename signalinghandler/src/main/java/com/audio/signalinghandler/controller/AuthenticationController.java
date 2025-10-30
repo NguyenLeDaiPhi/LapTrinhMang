@@ -53,7 +53,9 @@ public class AuthenticationController {
 
         if (token != null) {
             Cookie cookie = new Cookie("jwt-token-user", token);
-            cookie.setHttpOnly(true);
+            // Set HttpOnly to false so that client-side JavaScript can read it.
+            // This is necessary for the WebSocket connection header.
+            cookie.setHttpOnly(false);
             cookie.setPath("/");
             response.addCookie(cookie);
             return "redirect:/user/index";
