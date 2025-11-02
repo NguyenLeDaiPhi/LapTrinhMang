@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Signaling</title>
+    <link th:href="@{/css/main.css}" rel="stylesheet">
+</head>
+<body>
+
+<div id="login-page">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Enter your username" required/>
+    <button id="connect-btn">Connect</button>
+</div>
+
+<div id="room-page" class="hidden">
+    <h2>Room Selection</h2>
+    <p>Logged in as: <span id="username-display"></span></p>
+    <input type="text" id="room-id" placeholder="Enter Room ID"/>
+    <button id="join-btn">Join Room</button>
+    <button id="create-btn">Create & Join Room</button>
+</div>
+
+<div id="call-page" class="hidden">
+    <div class="call-controls">
+        <h2>Call Room: <span id="room-id-display"></span></h2>
+        <button id="hangup-btn">Hang Up</button>
+    </div>
+    <div id="videos">
+        <div class="video-container">
+            <h3>You</h3>
+            <video id="local-video" autoplay playsinline muted></video>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script th:src="@{/js/main.js}"></script>
+
+</body>
+</html>
