@@ -49,11 +49,20 @@
         <div class="call-header">
           <h2>WebRTC Audio Call</h2>
           <p>Your username: <span id="your-username"></span></p>
+          <p id="encryption-status" style="font-size: 0.9em; color: #666;"></p>
         </div>
         <div class="connecting">Connecting...</div>
         <div id="user-list">
-          <h3>Online Users</h3>
-          <ul id="users"></ul>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0;">Online Users</h3>
+            <button id="refresh-users-btn" style="padding: 5px 15px; font-size: 0.9em; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              🔄 Refresh
+            </button>
+          </div>
+          <p style="font-size: 0.9em; color: #666; margin-top: 5px;">
+            Click "Call" button next to a user to start an audio call
+          </p>
+          <ul id="users" style="list-style: none; padding: 0;"></ul>
         </div>
         <div id="audio-container">
           <!-- Audio elements will be added here dynamically -->

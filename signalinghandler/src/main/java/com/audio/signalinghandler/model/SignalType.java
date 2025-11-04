@@ -5,5 +5,9 @@ public enum SignalType {
     ANSWER,
     ICE,
     JOIN,
-    LEAVE
+    LEAVE,
+    KEY_EXCHANGE,
+    ENCRYPTION_ENABLED,
+    REQUEST_USERS,
+    USER_LIST
 }
