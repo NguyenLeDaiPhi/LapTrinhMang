@@ -2,12 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Spring Boot WebRTC Audio Call</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC Audio Call - Modern Interface</title>
     <link rel="stylesheet" href="/css/main.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="username-page" th:data-username="${username}">
-      <!-- Add this inside your #chat-page div in index.html -->
       <div class="logout-container">
         <form
           id="logout-form"
@@ -15,12 +18,21 @@
           action="/user/logout"
           style="display: none"
         ></form>
-        <button id="logout-button" type="button" class="accent-button">
+        <button id="logout-button" type="button" class="logout-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
           Logout
         </button>
       </div>
       <div class="username-page-container">
-        <h1 class="title">Click "Join Call" to start</h1>
+        <div class="welcome-content">
+          <div class="welcome-icon">📞</div>
+          <h1 class="title">Welcome to Audio Call</h1>
+          <p class="subtitle">Join the call room to start connecting with others</p>
+        </div>
         <form id="usernameForm" name="usernameForm">
           <div class="form-group">
             <input
@@ -31,13 +43,19 @@
               class="form-control hidden"
             />
           </div>
-          <div class="form-group">
-            <input type="checkbox" id="encrypt-checkbox" name="encrypt" />
-            <label for="encrypt-checkbox">Enable End-to-End Encryption</label>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="encrypt-checkbox" name="encrypt" />
+              <span class="checkmark"></span>
+              <span class="checkbox-text">Enable End-to-End Encryption</span>
+            </label>
           </div>
           <div class="form-group">
-            <button type="submit" class="accent username-submit">
-              Join Call
+            <button type="submit" class="btn-primary btn-large">
+              <span>Join Call Room</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
             </button>
           </div>
         </form>
@@ -47,25 +65,129 @@
     <div id="chat-page" class="hidden">
       <div class="call-container">
         <div class="call-header">
-          <h2>WebRTC Audio Call</h2>
-          <p>Your username: <span id="your-username"></span></p>
-          <p id="encryption-status" style="font-size: 0.9em; color: #666;"></p>
+          <div class="header-content">
+            <div class="header-info">
+              <h2>Audio Call Room</h2>
+              <div class="user-info">
+                <span class="user-label">You are:</span>
+                <span class="username-badge" id="your-username"></span>
+              </div>
+            </div>
+            <div class="header-actions">
+              <div id="encryption-status" class="encryption-badge"></div>
+              <button id="refresh-users-btn" class="btn-icon" title="Refresh Users">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="connecting">Connecting...</div>
-        <div id="user-list">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin: 0;">Online Users</h3>
-            <button id="refresh-users-btn" style="padding: 5px 15px; font-size: 0.9em; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">
-              🔄 Refresh
+        
+        <div class="connecting" id="connecting-indicator">
+          <div class="spinner"></div>
+          <span>Connecting to server...</span>
+        </div>
+        
+        <!-- Active Call Section -->
+        <div id="active-call-section" class="active-call-section hidden">
+          <div class="active-call-card">
+            <div class="active-call-header">
+              <div class="active-call-avatar">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </div>
+              <div class="active-call-info">
+                <div class="active-call-name" id="active-call-name">Unknown</div>
+                <div class="active-call-status" id="active-call-status">Connected</div>
+              </div>
+            </div>
+            <button id="end-call-btn" class="btn-end-call">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              End Call
             </button>
           </div>
-          <p style="font-size: 0.9em; color: #666; margin-top: 5px;">
-            Click "Call" button next to a user to start an audio call
-          </p>
-          <ul id="users" style="list-style: none; padding: 0;"></ul>
         </div>
+
+        <div id="user-list" class="user-list-container">
+          <div class="user-list-header">
+            <h3>Online Users</h3>
+            <span id="user-count" class="user-count">0 users</span>
+          </div>
+          <p class="user-list-subtitle">
+            Click "Call" to start an audio conversation
+          </p>
+          <ul id="users" class="users-list"></ul>
+        </div>
+        
         <div id="audio-container">
           <!-- Audio elements will be added here dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Call Notification Modal -->
+    <div id="call-notification-modal" class="call-modal hidden">
+      <div class="call-modal-overlay"></div>
+      <div class="call-modal-content">
+        <div class="call-modal-header">
+          <div class="caller-avatar">
+            <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div class="caller-info">
+            <div class="caller-name" id="caller-name">Unknown</div>
+            <div class="call-status">Incoming call...</div>
+          </div>
+        </div>
+        <div class="call-modal-actions">
+          <button id="reject-call-btn" class="btn-call btn-reject" title="Reject">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <button id="accept-call-btn" class="btn-call btn-accept" title="Accept">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Outgoing Call Modal -->
+    <div id="outgoing-call-modal" class="call-modal hidden">
+      <div class="call-modal-overlay"></div>
+      <div class="call-modal-content">
+        <div class="call-modal-header">
+          <div class="caller-avatar">
+            <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div class="caller-info">
+            <div class="caller-name" id="outgoing-call-target">Unknown</div>
+            <div class="call-status">Calling...</div>
+          </div>
+        </div>
+        <div class="call-modal-actions">
+          <button id="cancel-call-btn" class="btn-call btn-reject" title="Cancel">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
       </div>
     </div>

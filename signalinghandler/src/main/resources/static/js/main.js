@@ -11,6 +11,20 @@ const audioContainer = document.querySelector("#audio-container");
 const encryptCheckbox = document.querySelector("#encrypt-checkbox");
 const encryptionStatus = document.querySelector("#encryption-status");
 const refreshUsersBtn = document.querySelector("#refresh-users-btn");
+const userCount = document.querySelector("#user-count");
+
+// Call notification modal elements
+const callNotificationModal = document.querySelector("#call-notification-modal");
+const callerNameElement = document.querySelector("#caller-name");
+const acceptCallBtn = document.querySelector("#accept-call-btn");
+const rejectCallBtn = document.querySelector("#reject-call-btn");
+const outgoingCallModal = document.querySelector("#outgoing-call-modal");
+const outgoingCallTarget = document.querySelector("#outgoing-call-target");
+const cancelCallBtn = document.querySelector("#cancel-call-btn");
+const activeCallSection = document.querySelector("#active-call-section");
+const activeCallName = document.querySelector("#active-call-name");
+const activeCallStatus = document.querySelector("#active-call-status");
+const endCallBtn = document.querySelector("#end-call-btn");
 
 let stompClient = null;
 let username = null;
@@ -22,6 +36,12 @@ const peerConnections = {};
 // For E2EE - Store encryption keys per peer connection
 let useEncryption = false;
 const encryptionKeys = {}; // { 'otherUser': CryptoKey }
+
+// Call state management
+let incomingCallFrom = null; // Username of person calling us
+let outgoingCallTo = null; // Username we are calling
+let callTimeout = null;
+let activeCallWith = null; // Username we are currently in a call with
 
 const iceServers = {
   iceServers: [
@@ -48,11 +68,11 @@ async function connect(event) {
   
   // Update encryption status
   if (useEncryption) {
-    encryptionStatus.textContent = "🔒 Encryption: Enabled (waiting for peer connection)";
-    encryptionStatus.style.color = "#4CAF50";
+    encryptionStatus.textContent = "🔒 Encryption Enabled";
+    encryptionStatus.className = "encryption-badge";
   } else {
-    encryptionStatus.textContent = "🔓 Encryption: Disabled";
-    encryptionStatus.style.color = "#666";
+    encryptionStatus.textContent = "🔓 Encryption Disabled";
+    encryptionStatus.className = "encryption-badge";
   }
 
   try {
@@ -190,6 +210,13 @@ function onPublicMessageReceived(payload) {
         // Note: This might be a duplicate if also received via private queue, but processing is idempotent
         onPrivateMessageReceived(payload);
       }
+    } else if (message.type === "CALL_REQUEST" || message.type === "CALL_ACCEPTED" || 
+               message.type === "CALL_REJECTED" || message.type === "CALL_ENDED") {
+      // Handle call-related messages via public topic (fallback)
+      if (message.recipient === username && message.sender !== username) {
+        console.log(`Received ${message.type} via public topic from ${message.sender}`);
+        onPrivateMessageReceived(payload);
+      }
     } else if (message.type === "LEAVE" && message.sender !== username) {
       console.log(`User left: ${message.sender}`);
       removeUser(message.sender);
@@ -293,6 +320,22 @@ async function onPrivateMessageReceived(payload) {
       // Don't create peer connection automatically - wait for user to click Call
       // This prevents unwanted connections when users just join
       console.log(`User ${sender} added to list. Click "Call" button to start connection.`);
+    } else if (signal.type === "CALL_REQUEST") {
+      // Someone is calling us
+      console.log(`Received CALL_REQUEST from ${sender}`);
+      handleIncomingCall(sender);
+    } else if (signal.type === "CALL_ACCEPTED") {
+      // Our call was accepted
+      console.log(`Call accepted by ${sender}`);
+      handleCallAccepted(sender);
+    } else if (signal.type === "CALL_REJECTED") {
+      // Our call was rejected
+      console.log(`Call rejected by ${sender}`);
+      handleCallRejected(sender);
+    } else if (signal.type === "CALL_ENDED") {
+      // Call was ended by the other party
+      console.log(`Call ended by ${sender}`);
+      handleCallEnded(sender);
     } else if (signal.type === "KEY_EXCHANGE") {
       // Handle key exchange
       console.log(`Received key exchange from ${sender}`);
@@ -350,6 +393,8 @@ function createPeerConnection(otherUser, isOfferor) {
       .then(() => {
         console.log(`Audio playing for ${otherUser}`);
         updateUserConnectionStatus(otherUser);
+        // Show active call section
+        showActiveCall(otherUser);
       })
       .catch((e) => {
         console.error(`Error playing remote audio for ${otherUser}:`, e);
@@ -650,15 +695,19 @@ function updateEncryptionStatus() {
   const encryptedConnections = Object.keys(encryptionKeys).length;
   if (useEncryption) {
     if (encryptedConnections > 0) {
-      encryptionStatus.textContent = `🔒 Encryption: Active (${encryptedConnections} encrypted connection(s))`;
-      encryptionStatus.style.color = "#4CAF50";
+      encryptionStatus.textContent = `🔒 Encryption Active (${encryptedConnections})`;
     } else {
-      encryptionStatus.textContent = "🔒 Encryption: Enabled (waiting for peer)";
-      encryptionStatus.style.color = "#FF9800";
+      encryptionStatus.textContent = "🔒 Encryption Enabled";
     }
   } else {
-    encryptionStatus.textContent = "🔓 Encryption: Disabled";
-    encryptionStatus.style.color = "#666";
+    encryptionStatus.textContent = "🔓 Encryption Disabled";
+  }
+}
+
+function updateUserCount() {
+  const count = userList ? userList.children.length : 0;
+  if (userCount) {
+    userCount.textContent = `${count} user${count !== 1 ? 's' : ''}`;
   }
 }
 
@@ -684,41 +733,35 @@ function addUserToList(user) {
   console.log(`Creating new user element for: ${user}`);
   const userElement = document.createElement("li");
   userElement.id = `user-${user}`;
-  userElement.style.display = "flex";
-  userElement.style.justifyContent = "space-between";
-  userElement.style.alignItems = "center";
-  userElement.style.marginBottom = "10px";
-  userElement.style.padding = "8px";
-  userElement.style.border = "1px solid #ddd";
-  userElement.style.borderRadius = "4px";
+  userElement.className = "user-item";
   
   const userInfoDiv = document.createElement("div");
-  userInfoDiv.style.display = "flex";
-  userInfoDiv.style.flexDirection = "column";
-  userInfoDiv.style.flex = "1";
+  userInfoDiv.className = "user-item-info";
   
-  const userNameSpan = document.createElement("span");
+  const userNameSpan = document.createElement("div");
+  userNameSpan.className = "user-item-name";
   userNameSpan.textContent = user;
-  userNameSpan.style.fontWeight = "bold";
   
-  const statusSpan = document.createElement("span");
-  statusSpan.id = `status-${user}`;
-  statusSpan.textContent = "● Ready to call";
-  statusSpan.style.fontSize = "0.85em";
-  statusSpan.style.color = "#4CAF50";
+  const statusDiv = document.createElement("div");
+  statusDiv.className = "user-item-status";
+  statusDiv.id = `status-${user}`;
+  
+  const statusDot = document.createElement("span");
+  statusDot.className = "status-dot status-ready";
+  
+  const statusText = document.createElement("span");
+  statusText.textContent = "Ready to call";
+  
+  statusDiv.appendChild(statusDot);
+  statusDiv.appendChild(statusText);
   
   userInfoDiv.appendChild(userNameSpan);
-  userInfoDiv.appendChild(statusSpan);
+  userInfoDiv.appendChild(statusDiv);
   
   const callButton = document.createElement("button");
   callButton.id = `call-btn-${user}`;
-  callButton.textContent = "📞 Call";
-  callButton.style.padding = "5px 15px";
-  callButton.style.backgroundColor = "#4CAF50";
-  callButton.style.color = "white";
-  callButton.style.border = "none";
-  callButton.style.borderRadius = "4px";
-  callButton.style.cursor = "pointer";
+  callButton.className = "btn-call-action primary";
+  callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
   callButton.onclick = () => initiateCall(user);
   
   userElement.appendChild(userInfoDiv);
@@ -726,81 +769,93 @@ function addUserToList(user) {
   userList.appendChild(userElement);
   
   console.log(`Successfully added ${user} to list. Total users: ${userList.children.length}`);
+  updateUserCount();
   
   // Update status when connection state changes
   updateUserConnectionStatus(user);
 }
 
 function updateUserConnectionStatus(user) {
-  const statusSpan = document.getElementById(`status-${user}`);
+  const statusDiv = document.getElementById(`status-${user}`);
   const callButton = document.getElementById(`call-btn-${user}`);
   const pc = peerConnections[user];
   
   if (!pc) {
-    if (statusSpan) {
-      statusSpan.textContent = "● Ready to call";
-      statusSpan.style.color = "#4CAF50";
+    if (statusDiv) {
+      const dot = statusDiv.querySelector('.status-dot');
+      const text = statusDiv.querySelector('span:last-child');
+      if (dot) {
+        dot.className = "status-dot status-ready";
+      }
+      if (text) {
+        text.textContent = "Ready to call";
+      }
     }
     if (callButton) {
-      callButton.textContent = "📞 Call";
-      callButton.style.backgroundColor = "#4CAF50";
+      callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
       callButton.disabled = false;
+      callButton.className = "btn-call-action primary";
     }
     return;
   }
   
   const updateStatus = () => {
-    if (!statusSpan) return;
+    if (!statusDiv) return;
+    
+    const dot = statusDiv.querySelector('.status-dot');
+    const text = statusDiv.querySelector('span:last-child');
     
     switch (pc.connectionState) {
       case "connecting":
-        statusSpan.textContent = "● Connecting...";
-        statusSpan.style.color = "#FF9800";
+        if (dot) dot.className = "status-dot status-connecting";
+        if (text) text.textContent = "Connecting...";
         if (callButton) {
-          callButton.textContent = "⏳ Connecting";
-          callButton.style.backgroundColor = "#FF9800";
+          callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Connecting';
           callButton.disabled = true;
         }
         break;
       case "connected":
-        statusSpan.textContent = "● Connected";
-        statusSpan.style.color = "#4CAF50";
+        if (dot) dot.className = "status-dot status-connected";
+        if (text) text.textContent = "Connected";
         if (callButton) {
-          callButton.textContent = "✓ Connected";
-          callButton.style.backgroundColor = "#4CAF50";
+          callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Connected';
           callButton.disabled = true;
+          callButton.className = "btn-call-action primary";
         }
+        // Show active call section
+        showActiveCall(user);
         break;
       case "disconnected":
-        statusSpan.textContent = "● Disconnected";
-        statusSpan.style.color = "#f44336";
+        if (dot) dot.className = "status-dot status-disconnected";
+        if (text) text.textContent = "Disconnected";
         if (callButton) {
-          callButton.textContent = "📞 Call";
-          callButton.style.backgroundColor = "#4CAF50";
+          callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
           callButton.disabled = false;
+          callButton.className = "btn-call-action primary";
         }
+        // Hide active call section
+        hideActiveCall();
         break;
       case "failed":
-        statusSpan.textContent = "● Failed";
-        statusSpan.style.color = "#f44336";
+        if (dot) dot.className = "status-dot status-disconnected";
+        if (text) text.textContent = "Failed";
         if (callButton) {
-          callButton.textContent = "📞 Retry";
-          callButton.style.backgroundColor = "#f44336";
+          callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Retry';
           callButton.disabled = false;
+          callButton.className = "btn-call-action primary";
         }
         break;
       case "closed":
-        statusSpan.textContent = "● Closed";
-        statusSpan.style.color = "#999";
+        if (dot) dot.className = "status-dot status-disconnected";
+        if (text) text.textContent = "Closed";
         if (callButton) {
-          callButton.textContent = "📞 Call";
-          callButton.style.backgroundColor = "#4CAF50";
+          callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
           callButton.disabled = false;
+          callButton.className = "btn-call-action primary";
         }
         break;
       default:
-        statusSpan.textContent = "● " + pc.connectionState;
-        statusSpan.style.color = "#999";
+        if (text) text.textContent = pc.connectionState;
     }
   };
   
@@ -812,101 +867,320 @@ function updateUserConnectionStatus(user) {
     updateStatus();
   };
   
-  // Also listen for ice connection state
-  pc.oniceconnectionstatechange = () => {
-    if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-      if (statusSpan) {
-        statusSpan.textContent = "● Connected";
-        statusSpan.style.color = "#4CAF50";
+    // Also listen for ice connection state
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        const dot = statusDiv?.querySelector('.status-dot');
+        const text = statusDiv?.querySelector('span:last-child');
+        if (dot) dot.className = "status-dot status-connected";
+        if (text) text.textContent = "Connected";
+        // Show active call section
+        showActiveCall(user);
+      } else if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+        const dot = statusDiv?.querySelector('.status-dot');
+        const text = statusDiv?.querySelector('span:last-child');
+        if (dot) dot.className = "status-dot status-disconnected";
+        if (text) text.textContent = "Connection issue";
+        // Hide active call section if this was the active call
+        if (activeCallWith === user) {
+          hideActiveCall();
+        }
       }
-    } else if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
-      if (statusSpan) {
-        statusSpan.textContent = "● Connection issue";
-        statusSpan.style.color = "#f44336";
-      }
-    }
-  };
+    };
 }
 
 // Function to manually initiate a call with a specific user
 async function initiateCall(targetUser) {
   console.log(`Initiating call with ${targetUser}`);
   
+  // Don't allow calling if we're already in a call or have an outgoing call
+  if (outgoingCallTo || incomingCallFrom) {
+    console.log("Already in a call or have an outgoing call");
+    return;
+  }
+  
+  // Check if we already have an active connection with this user
+  if (peerConnections[targetUser] && peerConnections[targetUser].connectionState === "connected") {
+    console.log("Already connected to this user");
+    return;
+  }
+  
+  outgoingCallTo = targetUser;
+  
+  // Update button state
   const callButton = document.getElementById(`call-btn-${targetUser}`);
   if (callButton) {
     callButton.disabled = true;
-    callButton.textContent = "⏳ Calling...";
-    callButton.style.backgroundColor = "#FF9800";
+    callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Calling...';
   }
   
-  // Check if peer connection already exists
-  let pc = peerConnections[targetUser];
+  // Show outgoing call modal
+  if (outgoingCallTarget) {
+    outgoingCallTarget.textContent = targetUser;
+  }
+  if (outgoingCallModal) {
+    outgoingCallModal.classList.remove("hidden");
+  }
   
-  if (!pc) {
-    console.log(`No existing peer connection for ${targetUser}, creating new one...`);
-    // Determine who should be the offeror
-    const isOfferor = username < targetUser;
-    console.log(`I will be the offeror: ${isOfferor}`);
-    
-    // Check if both want encryption
-    // For manual calls, we'll use the current encryption setting
-    if (useEncryption) {
-      // If encryption is enabled, do key exchange first
-      console.log(`Encryption enabled, initiating key exchange...`);
-      await exchangeEncryptionKey(targetUser, isOfferor);
-    } else {
-      console.log(`Creating peer connection without encryption...`);
-      pc = createPeerConnection(targetUser, isOfferor);
-      
-      // If we're the offeror, manually trigger offer creation
-      if (isOfferor) {
-        console.log(`I'm the offeror, creating offer immediately...`);
-        setTimeout(async () => {
-          try {
-            await createOffer(pc, targetUser);
-          } catch (err) {
-            console.error("Error creating offer in initiateCall:", err);
-            if (callButton) {
-              callButton.disabled = false;
-              callButton.textContent = "📞 Call";
-              callButton.style.backgroundColor = "#4CAF50";
-            }
-          }
-        }, 300);
-      }
+  // Send call request
+  sendSignal({
+    type: "CALL_REQUEST",
+    sender: username,
+    recipient: targetUser,
+    useEncryption: useEncryption
+  });
+  
+  // Set timeout for call request (30 seconds)
+  callTimeout = setTimeout(() => {
+    if (outgoingCallTo === targetUser) {
+      console.log(`Call request timeout for ${targetUser}`);
+      handleCallTimeout(targetUser);
     }
-  } else {
-    console.log(`Peer connection already exists for ${targetUser}, state: ${pc.signalingState}`);
-    // If connection exists but is in stable state, create new offer
-    if (pc.signalingState === "stable" && pc.connectionState !== "closed") {
-      const isOfferor = username < targetUser;
-      if (isOfferor) {
-        console.log(`Connection is stable, creating new offer...`);
-        await createOffer(pc, targetUser);
-      } else {
-        console.log(`Not the offeror, waiting for offer from ${targetUser}`);
-      }
-    } else if (pc.connectionState === "closed" || pc.connectionState === "failed") {
-      // Recreate connection if it was closed or failed
-      console.log(`Connection is ${pc.connectionState}, recreating...`);
-      delete peerConnections[targetUser];
-      const isOfferor = username < targetUser;
+  }, 30000);
+}
+
+// Handle incoming call request
+function handleIncomingCall(callerUsername) {
+  console.log(`Handling incoming call from ${callerUsername}`);
+  
+  // Don't show incoming call if we're already in a call
+  if (outgoingCallTo || peerConnections[callerUsername]) {
+    // Auto-reject if busy
+    sendSignal({
+      type: "CALL_REJECTED",
+      sender: username,
+      recipient: callerUsername
+    });
+    return;
+  }
+  
+  incomingCallFrom = callerUsername;
+  
+  // Show incoming call modal
+  if (callerNameElement) {
+    callerNameElement.textContent = callerUsername;
+  }
+  if (callNotificationModal) {
+    callNotificationModal.classList.remove("hidden");
+  }
+  
+  // Play a notification sound (optional - browser may require user interaction first)
+  // You can add a sound notification here if needed
+}
+
+// Handle call accepted (when someone accepts our call request)
+async function handleCallAccepted(targetUser) {
+  console.log(`Call accepted by ${targetUser}`);
+  
+  // Clear timeout
+  if (callTimeout) {
+    clearTimeout(callTimeout);
+    callTimeout = null;
+  }
+  
+  // Hide outgoing call modal
+  if (outgoingCallModal) {
+    outgoingCallModal.classList.add("hidden");
+  }
+  
+  outgoingCallTo = null;
+  
+  // Update button
+  const callButton = document.getElementById(`call-btn-${targetUser}`);
+  if (callButton) {
+    callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Connecting...';
+  }
+  
+  // We initiated the call, so we are the offeror
+  const isOfferor = true;
+  console.log(`Call accepted! I am the offeror, creating peer connection and offer...`);
+  
       if (useEncryption) {
         await exchangeEncryptionKey(targetUser, isOfferor);
       } else {
-        pc = createPeerConnection(targetUser, isOfferor);
-        if (isOfferor) {
+    const pc = createPeerConnection(targetUser, isOfferor);
+    // We're the offeror, so create the offer
           setTimeout(async () => {
             try {
               await createOffer(pc, targetUser);
             } catch (err) {
-              console.error("Error creating offer after reconnect:", err);
+        console.error("Error creating offer:", err);
             }
           }, 300);
         }
       }
+
+// Handle call rejected
+function handleCallRejected(targetUser) {
+  console.log(`Call rejected by ${targetUser}`);
+  
+  // Clear timeout
+  if (callTimeout) {
+    clearTimeout(callTimeout);
+    callTimeout = null;
+  }
+  
+  // Hide outgoing call modal
+  if (outgoingCallModal) {
+    outgoingCallModal.classList.add("hidden");
+  }
+  
+  outgoingCallTo = null;
+  
+  // Update button
+  const callButton = document.getElementById(`call-btn-${targetUser}`);
+  if (callButton) {
+    callButton.disabled = false;
+    callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
+  }
+  
+  // Show notification
+  alert(`Call to ${targetUser} was rejected`);
+}
+
+// Show active call section
+function showActiveCall(user) {
+  activeCallWith = user;
+  if (activeCallName) {
+    activeCallName.textContent = user;
+  }
+  if (activeCallStatus) {
+    activeCallStatus.textContent = "Connected";
+  }
+  if (activeCallSection) {
+    activeCallSection.classList.remove("hidden");
+  }
+}
+
+// Hide active call section
+function hideActiveCall() {
+  activeCallWith = null;
+  if (activeCallSection) {
+    activeCallSection.classList.add("hidden");
+  }
+}
+
+// End call function
+function endCall(targetUser) {
+  console.log(`Ending call with ${targetUser}`);
+  
+  // Close peer connection
+  if (peerConnections[targetUser]) {
+    peerConnections[targetUser].close();
+    delete peerConnections[targetUser];
+  }
+  
+  // Remove encryption key
+  if (encryptionKeys[targetUser]) {
+    delete encryptionKeys[targetUser];
+    updateEncryptionStatus();
+  }
+  
+  // Remove audio element
+  const audioElement = document.getElementById(`audio-${targetUser}`);
+  if (audioElement) {
+    audioElement.remove();
+  }
+  
+  // Send call ended signal
+  sendSignal({
+    type: "CALL_ENDED",
+    sender: username,
+    recipient: targetUser
+  });
+  
+  // Hide active call section
+  hideActiveCall();
+  
+  // Update UI
+  updateUserConnectionStatus(targetUser);
+  
+  // Clear call state
+  if (incomingCallFrom === targetUser) {
+    incomingCallFrom = null;
+    if (callNotificationModal) {
+      callNotificationModal.classList.add("hidden");
     }
   }
+  if (outgoingCallTo === targetUser) {
+    outgoingCallTo = null;
+    if (callTimeout) {
+      clearTimeout(callTimeout);
+      callTimeout = null;
+    }
+    if (outgoingCallModal) {
+      outgoingCallModal.classList.add("hidden");
+    }
+  }
+}
+
+// Handle call ended
+function handleCallEnded(targetUser) {
+  console.log(`Call ended by ${targetUser}`);
+  
+  // Close peer connection
+  if (peerConnections[targetUser]) {
+    peerConnections[targetUser].close();
+    delete peerConnections[targetUser];
+  }
+  
+  // Remove encryption key
+  if (encryptionKeys[targetUser]) {
+    delete encryptionKeys[targetUser];
+    updateEncryptionStatus();
+  }
+  
+  // Remove audio element
+  const audioElement = document.getElementById(`audio-${targetUser}`);
+  if (audioElement) {
+    audioElement.remove();
+  }
+  
+  // Hide active call section
+  hideActiveCall();
+  
+  // Update UI
+  updateUserConnectionStatus(targetUser);
+  
+  // Clear call state
+  if (incomingCallFrom === targetUser) {
+    incomingCallFrom = null;
+    if (callNotificationModal) {
+      callNotificationModal.classList.add("hidden");
+    }
+  }
+  if (outgoingCallTo === targetUser) {
+    outgoingCallTo = null;
+    if (outgoingCallModal) {
+      outgoingCallModal.classList.add("hidden");
+    }
+  }
+}
+
+// Handle call timeout
+function handleCallTimeout(targetUser) {
+  console.log(`Call timeout for ${targetUser}`);
+  
+  if (callTimeout) {
+    clearTimeout(callTimeout);
+    callTimeout = null;
+  }
+  
+  // Hide outgoing call modal
+  if (outgoingCallModal) {
+    outgoingCallModal.classList.add("hidden");
+  }
+  
+  outgoingCallTo = null;
+  
+  // Update button
+  const callButton = document.getElementById(`call-btn-${targetUser}`);
+  if (callButton) {
+    callButton.disabled = false;
+    callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
+  }
+  
+  alert(`Call to ${targetUser} timed out`);
 }
 
 function removeUser(user) {
@@ -926,12 +1200,36 @@ function removeUser(user) {
   const userElement = document.getElementById(`user-${user}`);
   if (userElement) {
     userElement.remove();
+    updateUserCount();
   }
 
   // Remove audio element
   const audioElement = document.getElementById(`audio-${user}`);
   if (audioElement) {
     audioElement.remove();
+  }
+  
+  // Hide active call section if this was the active call
+  if (activeCallWith === user) {
+    hideActiveCall();
+  }
+  
+  // Clear call state if this user was involved
+  if (incomingCallFrom === user) {
+    incomingCallFrom = null;
+    if (callNotificationModal) {
+      callNotificationModal.classList.add("hidden");
+    }
+  }
+  if (outgoingCallTo === user) {
+    outgoingCallTo = null;
+    if (callTimeout) {
+      clearTimeout(callTimeout);
+      callTimeout = null;
+    }
+    if (outgoingCallModal) {
+      outgoingCallModal.classList.add("hidden");
+    }
   }
 }
 
@@ -971,10 +1269,120 @@ function requestUsersList() {
   );
 }
 
+// Accept call button handler
+if (acceptCallBtn) {
+  acceptCallBtn.addEventListener("click", async () => {
+    if (!incomingCallFrom) return;
+    
+    const caller = incomingCallFrom;
+    incomingCallFrom = null;
+    
+    // Hide incoming call modal
+    if (callNotificationModal) {
+      callNotificationModal.classList.add("hidden");
+    }
+    
+    // Send call accepted signal
+    sendSignal({
+      type: "CALL_ACCEPTED",
+      sender: username,
+      recipient: caller,
+      useEncryption: useEncryption
+    });
+    
+    // Create peer connection (we're the receiver, caller is the offeror)
+    // The caller will create the offer, we just wait for it
+    const isOfferor = false; // We're accepting, so we're NOT the offeror
+    console.log(`Accepting call from ${caller}, caller will be the offeror`);
+    
+    if (useEncryption) {
+      await exchangeEncryptionKey(caller, isOfferor);
+    } else {
+      createPeerConnection(caller, isOfferor);
+      // As receiver, we wait for the offer from the caller
+    }
+    
+    // Update button state
+    const callButton = document.getElementById(`call-btn-${caller}`);
+    if (callButton) {
+      callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Connecting...';
+      callButton.disabled = true;
+    }
+  });
+}
+
+// Reject call button handler
+if (rejectCallBtn) {
+  rejectCallBtn.addEventListener("click", () => {
+    if (!incomingCallFrom) return;
+    
+    const caller = incomingCallFrom;
+    incomingCallFrom = null;
+    
+    // Hide incoming call modal
+    if (callNotificationModal) {
+      callNotificationModal.classList.add("hidden");
+    }
+    
+    // Send call rejected signal
+    sendSignal({
+      type: "CALL_REJECTED",
+      sender: username,
+      recipient: caller
+    });
+  });
+}
+
+// Cancel call button handler
+if (cancelCallBtn) {
+  cancelCallBtn.addEventListener("click", () => {
+    if (!outgoingCallTo) return;
+    
+    const target = outgoingCallTo;
+    outgoingCallTo = null;
+    
+    // Clear timeout
+    if (callTimeout) {
+      clearTimeout(callTimeout);
+      callTimeout = null;
+    }
+    
+    // Hide outgoing call modal
+    if (outgoingCallModal) {
+      outgoingCallModal.classList.add("hidden");
+    }
+    
+    // Send call ended signal (or we could send CALL_REJECTED, but CALL_ENDED is more appropriate for cancelling)
+    sendSignal({
+      type: "CALL_ENDED",
+      sender: username,
+      recipient: target
+    });
+    
+    // Update button
+    const callButton = document.getElementById(`call-btn-${target}`);
+    if (callButton) {
+      callButton.disabled = false;
+      callButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg> Call';
+    }
+  });
+}
+
+// End call button handler
+if (endCallBtn) {
+  endCallBtn.addEventListener("click", () => {
+    if (activeCallWith) {
+      endCall(activeCallWith);
+    }
+  });
+}
+
 // Automatically connect when the page loads
 document.addEventListener("DOMContentLoaded", () => {
   username = usernamePage.getAttribute("data-username");
+  if (logoutButton) {
   logoutButton.addEventListener("click", logout);
+  }
   if (refreshUsersBtn) {
     refreshUsersBtn.addEventListener("click", requestUsersList);
   }
