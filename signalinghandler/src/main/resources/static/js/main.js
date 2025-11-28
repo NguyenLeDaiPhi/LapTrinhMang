@@ -16,7 +16,7 @@ const userCount = document.querySelector("#user-count");
 // Call notification modal elements
 const callNotificationModal = document.querySelector("#call-notification-modal");
 const callerNameElement = document.querySelector("#caller-name");
-const acceptCallBtn = document.querySelector("#accept-call-btn");
+const acceptCallBtn = document.querySelector("#accept-call-btn"); 
 const rejectCallBtn = document.querySelector("#reject-call-btn");
 const outgoingCallModal = document.querySelector("#outgoing-call-modal");
 const outgoingCallTarget = document.querySelector("#outgoing-call-target");
